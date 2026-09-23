@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: actualizar-plan
+  group: actualizar-plan-${{ github.event.client_payload.sync_id }}-${{ github.event.client_payload.index }}
   cancel-in-progress: false
 
 jobs:
