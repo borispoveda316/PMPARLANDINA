@@ -2,7 +2,7 @@ name: Actualizar datos públicos del plan
 
 on:
   repository_dispatch:
-    types: [actualizar-plan]
+    types: [actualizar-plan-pmparlandina]
 
 permissions:
   contents: write
