@@ -488,7 +488,7 @@
             <button id="columnButton" class="secondary-btn small-btn" type="button">29 columnas</button>
           </div>
           <div id="activitiesTable" class="table-wrap"></div>
-          <div class="pagination"><span id="pageSummary"></span><div class="pagination-actions"><button id="prevPage" class="secondary-btn small-btn" type="button">Anterior</button><button id="nextPage" class="secondary-btn small-btn" type="button">Siguiente</button></div></div>
+          <div class="pagination" hidden><span id="pageSummary"></span><div class="pagination-actions"><button id="prevPage" class="secondary-btn small-btn" type="button">Anterior</button><button id="nextPage" class="secondary-btn small-btn" type="button">Siguiente</button></div></div>
         </article>
       </section>
 
@@ -880,9 +880,9 @@
       function renderActivities() {
         renderFilterOptions();
         const filtered = filteredRecords();
-        const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-        state.page = clamp(state.page, 1, pages);
-        const slice = filtered.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE);
+        const pages = 1;
+        state.page = 1;
+        const slice = filtered;
         const publicHeaders = seed.headers.filter(field => !hiddenColumns.has(field));
         const visible = publicHeaders.filter(field => state.visibleColumns.has(field));
         const actionHeader = isEditor() ? `<th scope="col">Acción</th>` : "";
