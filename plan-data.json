@@ -3,7 +3,7 @@
     "sourceName": "Plan_de_Mejoras_Acreditacion_Andina_D1514(3).xlsx",
     "sheetName": "Plan de Mejoras",
     "range": "Tabla PlanMejoras",
-    "generatedAt": "2026-09-25T19:06:59.989Z",
+    "generatedAt": "2026-09-25T21:46:24.558Z",
     "totalActivities": 118,
     "totalColumns": 31,
     "minDate": "2026-10-05",
@@ -775,7 +775,7 @@
       "Semáforo de avance": "POR INICIAR",
       "Evidencias": "",
       "Nivel de cumplimiento": "",
-      "Observaciones": "APROBADO POR ANDRÉS"
+      "Observaciones": ""
     },
     {
       "_excelRow": 20,
