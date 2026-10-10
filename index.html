@@ -222,7 +222,7 @@
     .alert-item p { margin: 3px 0 0; color: var(--muted); font-size: .78rem; }
     .alert-count { min-width: 34px; padding: 3px 8px; border-radius: 999px; background: var(--blue-soft); color: var(--navy); text-align: center; font-size: .76rem; font-weight: 800; }
 
-    .filters { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 10px; margin: 0 0 14px; }
+    .filters { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; margin: 0 0 14px; }
     .field { display: grid; gap: 5px; }
     .field label { color: var(--muted); font-size: .78rem; font-weight: 700; }
     .field input, .field select, .field textarea {
@@ -246,6 +246,9 @@
     .table-wrap { overflow: auto; max-height: 68vh; background: #fff; }
     table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: .82rem; }
     th, td { max-width: 420px; padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid #edf1f4; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .sort-btn { all: unset; cursor: pointer; display: inline; color: inherit; font: inherit; }
+    .sort-btn:hover, .sort-btn:focus-visible { text-decoration: underline; }
+    .alert-item[data-deadline] { cursor: pointer; }
     th { position: sticky; z-index: 5; top: 0; color: #fff; background: var(--navy); text-align: left; font-size: .76rem; line-height: 1.25; }
     th:first-child, td:first-child { position: sticky; left: 0; z-index: 4; min-width: 82px; }
     th:first-child { z-index: 7; background: #061f37; }
@@ -361,6 +364,16 @@
       .data-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 620px) {
+      .table-wrap { max-height: none; }
+      .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: 100%; min-width: 0; max-width: none; }
+      .table-wrap thead { display: none; }
+      .table-wrap tbody tr { margin: 10px; width: auto; padding: 10px 12px; border: 1px solid var(--line); border-left: 5px solid var(--navy); border-radius: 10px; background: #fff; cursor: pointer; }
+      .table-wrap td, .table-wrap td:first-child { position: static; padding: 4px 0; border: 0; background: transparent !important; text-align: left; }
+      .table-wrap td::before { content: attr(data-label); display: block; color: var(--muted); font-size: .68rem; font-weight: 400; text-transform: uppercase; letter-spacing: .035em; }
+      .table-wrap td:not(.m-key) { display: none; }
+      .table-wrap tr.open td:not(.m-key) { display: block; }
+      .table-wrap tbody tr:not(.open)::after { content: "Toca para ver todos los campos"; display: block; padding-top: 6px; color: var(--teal); font-size: .72rem; }
+      .table-wrap td.empty { display: block; }
       .topbar { padding: 12px 14px; gap: 10px; }
       .brand-title span { display: none; }
       .top-actions .label { display: none; }
@@ -474,10 +487,11 @@
           <div><h1 id="activitiesTitle">Consulta de actividades</h1><p id="activitiesHelp">La búsqueda superior revisa todas las columnas del plan.</p></div>
         </div>
         <div class="filters">
-          <div class="field"><label for="phaseFilter">Fase</label><select id="phaseFilter"><option value="">Todas</option></select></div>
           <div class="field"><label for="indicatorFilter">Indicador</label><select id="indicatorFilter"><option value="">Todos</option></select></div>
+          <div class="field"><label for="responsibleFilter">Responsable</label><select id="responsibleFilter"><option value="">Todos</option></select></div>
           <div class="field"><label for="priorityFilter">Prioridad</label><select id="priorityFilter"><option value="">Todas</option></select></div>
           <div class="field"><label for="statusFilter">Estado</label><select id="statusFilter"><option value="">Todos</option></select></div>
+          <div class="field"><label for="deadlineFilter">Vencimiento</label><select id="deadlineFilter"><option value="">Todos</option><option value="Vencidas">Vencidas</option><option value="Por vencer (30 días)">Por vencer (30 días)</option></select></div>
           <div class="filter-actions"><button id="clearFiltersButton" class="ghost-btn" type="button">Limpiar filtros</button></div>
         </div>
         <article class="card table-card">
@@ -562,6 +576,7 @@
       const PAGE_SIZE = 25;
       const graphBase = "https://graph.microsoft.com/v1.0";
       const oauthScopes = "openid profile offline_access User.Read Files.ReadWrite";
+      const mobileColumns = new Set(["ID", "Variable", "Indicador", "Actividad", "Responsable", "Fecha de fin", "Prioridad", "Estado", "Avance (%)"]);
       const hiddenColumns = new Set(["Fase", "Organismo"]);
       const keyColumns = ["ID", "Variable", "Código indicador", "Indicador", "Resultado", "Unidad", "Actividad", "Responsable", "Fecha de inicio", "Fecha de fin", "Prioridad", "Estado", "Avance (%)", "Avance esperado (%)", "Semáforo de avance", "Evidencias", "Nivel de cumplimiento", "Observaciones"];
       const longColumns = new Set(["Descripción Indicador", "Fórmula de cálculo", "Descripción del hallazgo", "Descripción de la actividad", "Medida de mitigación", "Producto / Entregable", "Medio de verificación", "Criterio de aceptación (evidencia de cumplimiento)", "Observaciones"]);
@@ -582,7 +597,8 @@
         base: new Map(),
         dirty: new Map(),
         search: "",
-        filters: { phase: "", indicator: "", priority: "", status: "" },
+        filters: { indicator: "", responsible: "", priority: "", status: "", deadline: "" },
+        sort: { field: "", dir: "asc" },
         page: 1,
         activeView: "overview",
         visibleColumns: new Set(seed.headers.filter(field => !hiddenColumns.has(field))),
@@ -813,10 +829,11 @@
         const alerts = [
           { title: "Nivel de cumplimiento pendiente", detail: `${records.filter(r => !plain(r["Nivel de cumplimiento"])).length} actividades sin valoración manual`, count: records.filter(r => !plain(r["Nivel de cumplimiento"])).length, cls: "critical" },
           { title: "Actividades no iniciadas", detail: "Actividades con avance igual a 0%", count: records.filter(r => activityAdvance(r) === 0).length, cls: "info" },
-          { title: "Próximos 30 días", detail: "Actividades que vencen pronto", count: records.filter(isDueSoon).length, cls: "info" },
+          { title: "Vencidas", detail: "Actividades fuera de plazo y sin completar. Clic para ver el listado", count: overdue, cls: overdue ? "critical" : "", deadline: "Vencidas" },
+          { title: "Próximos 30 días", detail: "Actividades que vencen pronto. Clic para ver el listado", count: records.filter(isDueSoon).length, cls: "info", deadline: "Por vencer (30 días)" },
           { title: "Calidad de datos", detail: `${issues.length} controles con observaciones`, count: issues.length, cls: "" }
         ];
-        $("#priorityAlerts").innerHTML = alerts.map(a => `<div class="alert-item ${a.cls}"><div><strong>${esc(a.title)}</strong><p>${esc(a.detail)}</p></div><span class="alert-count">${a.count}</span></div>`).join("");
+        $("#priorityAlerts").innerHTML = alerts.map(a => `<div class="alert-item ${a.cls}"${a.deadline ? ` data-deadline="${esc(a.deadline)}" role="button" tabindex="0"` : ""}><div><strong>${esc(a.title)}</strong><p>${esc(a.detail)}</p></div><span class="alert-count">${a.count}</span></div>`).join("");
         const minDate = records.map(r => r["Fecha de inicio"]).filter(Boolean).sort()[0];
         const maxDate = records.map(r => r["Fecha de fin"]).filter(Boolean).sort().at(-1);
         const phases = unique(records.map(r => phaseCode(r.Fase))).length;
@@ -844,24 +861,42 @@
         const query = norm(state.search);
         return state.records.filter(record => {
           if (query && !seed.headers.some(field => norm(record[field]).includes(query))) return false;
-          if (state.filters.phase && phaseCode(record.Fase) !== state.filters.phase) return false;
           if (state.filters.indicator && record.Indicador !== state.filters.indicator) return false;
+          if (state.filters.responsible && !splitResponsible(record).map(norm).includes(norm(state.filters.responsible))) return false;
           if (state.filters.priority && record.Prioridad !== state.filters.priority) return false;
           if (state.filters.status && record.Estado !== state.filters.status) return false;
+          if (state.filters.deadline === "Vencidas" && !isOverdue(record)) return false;
+          if (state.filters.deadline === "Por vencer (30 días)" && !isDueSoon(record)) return false;
           return true;
+        });
+      }
+
+      function sortedRecords(records) {
+        const { field, dir } = state.sort;
+        const sortField = field || (state.filters.deadline ? "Fecha de fin" : "");
+        if (!sortField) return records;
+        const factor = dir === "desc" && field ? -1 : 1;
+        const key = r => sortField === "Avance (%)" ? activityAdvance(r) : sortField === "Avance esperado (%)" ? expectedAdvance(r) : numericColumns.has(sortField) ? (Number.isFinite(Number(r[sortField])) && plain(r[sortField]) !== "" ? Number(r[sortField]) : null) : plain(r[sortField]);
+        return [...records].sort((a, b) => {
+          const ka = key(a), kb = key(b);
+          if ((ka === null || ka === "") !== (kb === null || kb === "")) return ka === null || ka === "" ? 1 : -1;
+          if (typeof ka === "number" && typeof kb === "number") return (ka - kb) * factor;
+          return collator.compare(String(ka), String(kb)) * factor;
         });
       }
 
       function renderFilterOptions() {
         const sets = {
-          phaseFilter: unique(state.records.map(r => phaseCode(r.Fase))).sort(collator.compare),
           indicatorFilter: unique(state.records.map(r => r.Indicador)).sort(collator.compare),
+          responsibleFilter: unique(state.records.flatMap(r => splitResponsible(r))).sort(collator.compare),
           priorityFilter: unique(state.records.map(r => r.Prioridad)).sort(collator.compare),
           statusFilter: unique(state.records.map(r => r.Estado)).sort(collator.compare)
         };
+        const filterKeys = { indicatorFilter: "indicator", responsibleFilter: "responsible", priorityFilter: "priority", statusFilter: "status" };
+        $("#deadlineFilter").value = state.filters.deadline;
         for (const [id, values] of Object.entries(sets)) {
           const select = document.getElementById(id);
-          const current = select.value;
+          const current = state.filters[filterKeys[id]] ?? select.value;
           const label = select.options[0].textContent;
           select.innerHTML = `<option value="">${esc(label)}</option>` + values.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join("");
           select.value = current;
@@ -882,19 +917,19 @@
         const filtered = filteredRecords();
         const pages = 1;
         state.page = 1;
-        const slice = filtered;
+        const slice = sortedRecords(filtered);
         const publicHeaders = seed.headers.filter(field => !hiddenColumns.has(field));
         const visible = publicHeaders.filter(field => state.visibleColumns.has(field));
         const actionHeader = isEditor() ? `<th scope="col">Acción</th>` : "";
-        const header = `<thead><tr>${visible.map(field => `<th scope="col">${esc(field)}</th>`).join("")}${actionHeader}</tr></thead>`;
+        const header = `<thead><tr>${visible.map(field => `<th scope="col" aria-sort="${state.sort.field === field ? (state.sort.dir === "asc" ? "ascending" : "descending") : "none"}"><button type="button" class="sort-btn" data-sort="${esc(field)}" title="Ordenar por ${esc(field)}">${esc(field)}<span aria-hidden="true">${state.sort.field === field ? (state.sort.dir === "asc" ? " ▲" : " ▼") : ""}</span></button></th>`).join("")}${actionHeader}</tr></thead>`;
         const body = slice.length ? `<tbody>${slice.map(record => `<tr>${visible.map(field => {
           const value = displayCell(record, field);
-          const cls = longColumns.has(field) ? "long" : mediumColumns.has(field) ? "medium" : numericColumns.has(field) ? "number" : "";
+          const cls = [longColumns.has(field) ? "long" : mediumColumns.has(field) ? "medium" : numericColumns.has(field) ? "number" : "", mobileColumns.has(field) ? "m-key" : ""].filter(Boolean).join(" ");
           let content = `<span class="cell-clamp" title="${esc(value)}">${esc(value)}</span>`;
           if (field === "Prioridad") content = `<span class="badge ${norm(value) === "critica" ? "red" : norm(value) === "alta" ? "amber" : ""}">${esc(value)}</span>`;
           if (field === "Estado") content = `<span class="badge ${activityAdvance(record) >= 100 ? "green" : activityAdvance(record) > 0 ? "amber" : "red"}">${esc(value)}</span>`;
           if (field === "Nivel de cumplimiento") content = `<span class="badge ${norm(value) === "cumple" ? "green" : norm(value) === "no cumple" ? "red" : norm(value) === "cumple parcial" ? "amber" : ""}">${esc(value)}</span>`;
-          return `<td class="${cls}">${content}</td>`;
+          return `<td class="${cls}" data-label="${esc(field)}">${content}</td>`;
         }).join("")}${isEditor() ? `<td><div class="row-actions"><button class="edit-link" type="button" data-edit-row="${record._excelRow}">Editar</button></div></td>` : ""}</tr>`).join("")}</tbody>` : `<tbody><tr><td colspan="${visible.length + (isEditor() ? 1 : 0)}" class="empty">No existen actividades que coincidan con la búsqueda y los filtros.</td></tr></tbody>`;
         $("#activitiesTable").innerHTML = `<table>${header}${body}</table>`;
         $("#activitiesTitle").textContent = isEditor() ? "Consulta y edición de actividades" : "Consulta de actividades";
@@ -905,6 +940,7 @@
         $("#pageSummary").textContent = `Página ${state.page} de ${pages}`;
         $("#prevPage").disabled = state.page <= 1;
         $("#nextPage").disabled = state.page >= pages;
+        writeUrlState();
         $("#columnButton").textContent = `${visible.length} de ${publicHeaders.length} columnas`;
       }
 
@@ -1009,11 +1045,39 @@
         $$('[data-editor-only]').forEach(element => { element.hidden = !isEditor(); });
       }
 
+      const URL_FILTER_KEYS = { q: "search", indicador: "indicator", responsable: "responsible", prioridad: "priority", estado: "status", vencimiento: "deadline" };
+      function readUrlState() {
+        const params = new URLSearchParams(location.search);
+        for (const [param, key] of Object.entries(URL_FILTER_KEYS)) {
+          const value = params.get(param) || "";
+          if (key === "search") state.search = value; else state.filters[key] = value;
+        }
+        $("#globalSearch").value = state.search;
+        const sortField = params.get("orden");
+        if (sortField && seed.headers.includes(sortField)) state.sort = { field: sortField, dir: params.get("dir") === "desc" ? "desc" : "asc" };
+        const view = params.get("vista");
+        return $$(".tab").some(tab => tab.dataset.view === view) ? view : "";
+      }
+      function writeUrlState() {
+        try {
+          const params = new URLSearchParams(location.search);
+          for (const [param, key] of Object.entries(URL_FILTER_KEYS)) {
+            const value = key === "search" ? state.search : state.filters[key];
+            if (value) params.set(param, value); else params.delete(param);
+          }
+          if (state.sort.field) { params.set("orden", state.sort.field); params.set("dir", state.sort.dir); } else { params.delete("orden"); params.delete("dir"); }
+          if (state.activeView !== "overview") params.set("vista", state.activeView); else params.delete("vista");
+          const query = params.toString();
+          history.replaceState(null, "", location.pathname + (query ? "?" + query : "") + location.hash);
+        } catch { /* file:// o entornos sin History API */ }
+      }
+
       function showView(name) {
         state.activeView = name;
         $$(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.view === name));
         $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
         if (name === "activities") renderActivities();
+        writeUrlState();
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
 
@@ -1433,9 +1497,33 @@
         $$(".tab").forEach(tab => tab.addEventListener("click", () => showView(tab.dataset.view)));
         $$('[data-go]').forEach(button => button.addEventListener("click", () => showView(button.dataset.go)));
         $("#globalSearch").addEventListener("input", event => { state.search = event.target.value; state.page = 1; if (state.activeView !== "activities") showView("activities"); else renderActivities(); });
-        [["phaseFilter","phase"],["indicatorFilter","indicator"],["priorityFilter","priority"],["statusFilter","status"]].forEach(([id,key]) => $("#"+id).addEventListener("change", event => { state.filters[key] = event.target.value; state.page = 1; renderActivities(); }));
-        $("#clearFiltersButton").addEventListener("click", () => { state.filters = {phase:"",indicator:"",priority:"",status:""}; state.search=""; $("#globalSearch").value=""; state.page=1; renderActivities(); });
-        $("#activitiesTable").addEventListener("click", event => { const button = event.target.closest("[data-edit-row]"); if (button) openEdit(button.dataset.editRow); });
+        [["indicatorFilter","indicator"],["responsibleFilter","responsible"],["priorityFilter","priority"],["statusFilter","status"],["deadlineFilter","deadline"]].forEach(([id,key]) => $("#"+id).addEventListener("change", event => { state.filters[key] = event.target.value; state.page = 1; renderActivities(); }));
+        $("#clearFiltersButton").addEventListener("click", () => { state.filters = {indicator:"",responsible:"",priority:"",status:"",deadline:""}; state.search=""; $("#globalSearch").value=""; state.page=1; renderActivities(); });
+        const openDeadline = event => {
+          const item = event.target.closest("[data-deadline]");
+          if (!item || (event.type === "keydown" && event.key !== "Enter")) return;
+          state.filters = { indicator: "", responsible: "", priority: "", status: "", deadline: item.dataset.deadline };
+          state.search = ""; $("#globalSearch").value = "";
+          state.sort = { field: "", dir: "asc" };
+          showView("activities");
+        };
+        $("#priorityAlerts").addEventListener("click", openDeadline);
+        $("#priorityAlerts").addEventListener("keydown", openDeadline);
+        $("#activitiesTable").addEventListener("click", event => {
+          const sortButton = event.target.closest("[data-sort]");
+          if (sortButton) {
+            const field = sortButton.dataset.sort;
+            if (state.sort.field !== field) state.sort = { field, dir: "asc" };
+            else if (state.sort.dir === "asc") state.sort.dir = "desc";
+            else state.sort = { field: "", dir: "asc" };
+            renderActivities();
+            return;
+          }
+          const button = event.target.closest("[data-edit-row]");
+          if (button) { openEdit(button.dataset.editRow); return; }
+          const row = event.target.closest("tbody tr");
+          if (row && window.matchMedia("(max-width: 620px)").matches) row.classList.toggle("open");
+        });
         $("#prevPage").addEventListener("click", () => { state.page--; renderActivities(); });
         $("#nextPage").addEventListener("click", () => { state.page++; renderActivities(); });
         $("#editForm").addEventListener("submit", saveEdit);
@@ -1455,7 +1543,9 @@
         await Promise.all([loadPublishedData(), loadDeploymentConfig()]);
         bindEvents();
         registerWebMcp();
+        const initialView = readUrlState();
         renderAll();
+        if (initialView) showView(initialView);
         try {
           await handleOauthCallback();
           if (state.graph.accessToken && state.graph.accessMode === "unknown") await connectWorkbook();
